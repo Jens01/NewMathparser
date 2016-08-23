@@ -13,11 +13,11 @@ How to use :
 var
  MP : TMathParser;
  Error: TError;
-begin*
+begin
  MP := TMathParser.Create;
  try
    MP.Expression := '((4+5)6)7 + Min(3, 4, 5)';
-   Error := TError;
+   Error := MP.GetLastError;
    if Error.IsNoError then
      ShowMessage(MP.ParserResult.ToString)
    else
