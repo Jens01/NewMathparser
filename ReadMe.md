@@ -9,9 +9,9 @@ Uses „Reverse Polish Notation“ (RPN)
 With Unittesting!
 
 Operators:
-+ - * / : plus, minus, multiplication, division
-^       : power
-%       : mod
+'+' '-' '*' '/' : plus, minus, multiplication, division
+'^'             : power
+'%'             : mod
 
 How to use :
 ```delphi
@@ -67,12 +67,12 @@ begin
  MP := TMathParser.Create;
  try
    MP.Expression := 'a + b';
-    Variables.Add('A',
+   MP.Variables.Add('A',
       function: Double
       begin
         Result := 3 + 3
       end);
-    Variables.Add('b',
+   MP.Variables.Add('b',
       function: Double
       begin
         Result := 4
