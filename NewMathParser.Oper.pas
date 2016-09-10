@@ -5,6 +5,7 @@
 /// Viel geändert von Jens Biermann am 07.02.2012
 /// Viel geändert von Jens Biermann am 29.01.2015
 /// Änderungen von Jens Biermann am 23.08.2016
+/// Items in TVariables - Jens Biermann am 10.09.2016
 
 unit NewMathParser.Oper;
 
@@ -41,9 +42,10 @@ const
 type
 
   PError = ^TError;
+
   TError = record
   private
-    FCode: Integer;
+    FCode    : Integer;
     FPosition: Integer;
   public
     constructor Create(ACode, APosition: Integer);
@@ -143,9 +145,13 @@ type
   end;
 
   TVariables = class(TDictionary<string, TVar>)
+  private
+    function GetItem(const Key: string): TVar;
+    procedure SetItem(const Key: string; const Value: TVar);
   public
     procedure Add(Name: string; Value: Double); overload;
     procedure Add(Name: string; Value: TFunc<Double>); overload;
+    property Items[const Key: string]: TVar read GetItem write SetItem; default;
   end;
 
 procedure ClearAndFreeStack(S: TStack<TParserItem>);
@@ -712,7 +718,7 @@ begin
   FValue     := 0;
   FTypeStack := aTypeStack;
   FName      := aName;
-  FTextPos := APos;
+  FTextPos   := APos;
 end;
 
 procedure TParserItem.Assign(Source: TObject);
@@ -791,7 +797,6 @@ begin
   S.WriteBuffer(FArgumentsCount, SizeOf(Integer));
 end;
 
-
 procedure ClearAndFreeStack(S: TStack<TParserItem>);
 begin
   while S.Count > 0 do
@@ -860,17 +865,27 @@ begin
   inherited AddOrSetValue(Name.ToUpper, TVar.Create(Name, Value));
 end;
 
+function TVariables.GetItem(const Key: string): TVar;
+begin
+  Result := Self.Items[Key.ToUpper];
+end;
+
+procedure TVariables.SetItem(const Key: string; const Value: TVar);
+begin
+  AddOrSetValue(Key.ToUpper, Value);
+end;
+
 { TError }
 
 procedure TError.Clear;
 begin
-  FCode := cNoError;
+  FCode     := cNoError;
   FPosition := -1;
 end;
 
 constructor TError.Create(ACode, APosition: Integer);
 begin
-  FCode := ACode;
+  FCode     := ACode;
   FPosition := APosition;
 end;
 
