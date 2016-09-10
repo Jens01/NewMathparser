@@ -7,20 +7,23 @@ unit NewMathParser.Test;
 interface
 
 uses
-  TestFramework, NewMathParser, System.Classes, System.Math, System.SysUtils, NewMathParser.Oper;
+  TestFramework, NewMathParser, System.Classes, System.Math, System.SysUtils, NewMathParser.Oper,
+  System.Diagnostics;
 
 type
 
-  TestTcyMathParser = class(TTestCase)
+  TestTMathParser = class(TTestCase)
   strict private
-    FcyMathParser: TMathParser;
-    FResultError : TError;
+    FMathParser : TMathParser;
+    FResultError: TError;
     procedure OnE(Sender: TObject; Error: TError);
     procedure SetUp; override;
     procedure TearDown; override;
     procedure CheckError(AExpected, AResult: TError; Msg: string = '');
+    procedure CheckPerformance(aCode: TProc; ExpectedMinTime, ExpectedMaxTime: Int64; const aMessage: string = '');
   published
     procedure Test1;
+    procedure TestBrackekts;
     procedure TestAdd;
     procedure TestSub;
     procedure TestMulty;
@@ -77,36 +80,49 @@ type
     procedure TestATanD;
     procedure TestStream;
     procedure TestError;
+    procedure TestPerformance;
   end;
 
 implementation
 
-procedure TestTcyMathParser.SetUp;
+procedure TestTMathParser.SetUp;
 begin
-  FcyMathParser         := TMathParser.Create;
-  FcyMathParser.OnError := OnE;
+  FMathParser         := TMathParser.Create;
+  FMathParser.OnError := OnE;
 end;
 
-procedure TestTcyMathParser.TearDown;
+procedure TestTMathParser.TearDown;
 begin
-  FcyMathParser.Free;
-  FcyMathParser := nil;
+  FMathParser.Free;
+  FMathParser := nil;
 end;
 
-procedure TestTcyMathParser.TestMax;
+procedure TestTMathParser.CheckPerformance(aCode: TProc; ExpectedMinTime, ExpectedMaxTime: Int64; const aMessage: string);
+var
+  SW: TStopwatch;
+begin
+  SW := TStopwatch.Create;
+  SW.Start;
+  aCode;
+  SW.Stop;
+  CheckTrue(SW.ElapsedMilliseconds > ExpectedMinTime, '[' + SW.ElapsedMilliseconds.ToString + 'ms MinTime]' + aMessage);
+  CheckTrue(SW.ElapsedMilliseconds < ExpectedMaxTime, '[' + SW.ElapsedMilliseconds.ToString + 'ms MaxTime]' + aMessage);
+end;
+
+procedure TestTMathParser.TestMax;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
   Expected, ReturnValue  : Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Max(3, 4, 4,5)';
     Expected    := 4.5;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'Max(4,5)';
     R                  := ParserResult;
@@ -117,20 +133,20 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestMin;
+procedure TestTMathParser.TestMin;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
   Expected, ReturnValue  : Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Min(3, 4, 4,5)';
     Expected    := 3;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'Min(4,5)';
     R                  := ParserResult;
@@ -141,11 +157,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestMod;
+procedure TestTMathParser.TestMod;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '19 % 4';
     Expected    := 3;
@@ -154,12 +170,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestMod2;
+procedure TestTMathParser.TestMod2;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := '19 % 0';
     R                  := ParserResult;
@@ -171,11 +187,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestMulty;
+procedure TestTMathParser.TestMulty;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '3 * 4';
     Expected    := 12;
@@ -184,11 +200,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestNeg;
+procedure TestTMathParser.TestNeg;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '-2 + 5';
     Expected    := 3;
@@ -197,24 +213,24 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.CheckError(AExpected, AResult: TError; Msg: string);
+procedure TestTMathParser.CheckError(AExpected, AResult: TError; Msg: string);
 begin
   CheckEquals(AExpected.Code, AResult.Code, Msg + ' Code: ');
   CheckEquals(AExpected.Position, AResult.Position, Msg + ' Pos: ');
 end;
 
-procedure TestTcyMathParser.OnE(Sender: TObject; Error: TError);
+procedure TestTMathParser.OnE(Sender: TObject; Error: TError);
 begin
   FResultError := Error;
 end;
 
-procedure TestTcyMathParser.Test1;
+procedure TestTMathParser.Test1;
 var
   R                      : Double;
   Expected, ReturnValue  : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '((4+5)6)7 + Min(3, 4, 5)';
     Expected    := 381;
@@ -222,7 +238,7 @@ begin
     CheckEquals(Expected, ReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Max(3+5, 4, 5) + Min(3, 4, 5)';
     Expected    := 11;
@@ -230,14 +246,14 @@ begin
     CheckEquals(Expected, ReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Max(3, 4, 5) + Min(3, 4, 5)';
     Expected    := 8;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := '25 + Max(3,4)';
     R                  := ParserResult;
@@ -246,7 +262,7 @@ begin
     EReturnValue       := GetLastError;
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('a', 12);
     Expression  := 'Max(3, a, 5)';
@@ -254,7 +270,7 @@ begin
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('a', 12);
     Expression  := 'Max(3, a/2, 5)';
@@ -262,7 +278,7 @@ begin
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('a', 12);
     Expression  := 'Max(3, 2a/2, 5)';
@@ -270,7 +286,7 @@ begin
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('a', 6);
     Expression  := 'Max(3, 2a, 5)';
@@ -278,14 +294,14 @@ begin
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Max(3, Min(20, 21), 5)';
     Expected    := 20;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('a', 3);
     Expression  := 'a(3+5)';
@@ -293,7 +309,7 @@ begin
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('a', 3);
     Expression  := '(3+5)a';
@@ -301,7 +317,7 @@ begin
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('a', 4);
     Expression  := '3a';
@@ -309,7 +325,7 @@ begin
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('a', 4);
     Expression         := 'a3';
@@ -319,14 +335,14 @@ begin
     EReturnValue       := GetLastError;
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '+3';
     Expected    := 3;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Max(+3, -3)';
     Expected    := 3;
@@ -335,13 +351,13 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestAbs;
+procedure TestTMathParser.TestAbs;
 var
   R                      : Double;
   Expected, ReturnValue  : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'Abs(-2, 2, 4)';
     R                  := ParserResult;
@@ -363,11 +379,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestACos;
+procedure TestTMathParser.TestACos;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'ACos(0.5)';
     Expected    := 1.0472;
@@ -376,12 +392,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestACos2;
+procedure TestTMathParser.TestACos2;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'ACos(-1.1)';
     R                  := ParserResult;
@@ -401,11 +417,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestACosD;
+procedure TestTMathParser.TestACosD;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'ACosD(0.5)';
     Expected    := 60;
@@ -414,12 +430,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestACosD2;
+procedure TestTMathParser.TestACosD2;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'ACosD(RadToDeg(-1.1))';
     R                  := ParserResult;
@@ -439,24 +455,24 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestAdd;
+procedure TestTMathParser.TestAdd;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
-    Expression  := '2 + 2';
-    Expected    := 4;
+    Expression  := '2 + 3';
+    Expected    := 5;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
 end;
 
-procedure TestTcyMathParser.TestASin;
+procedure TestTMathParser.TestASin;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'ASin(0.5)';
     Expected    := 0.5236;
@@ -465,12 +481,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestASin2;
+procedure TestTMathParser.TestASin2;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'ASin(-1.1)';
     R                  := ParserResult;
@@ -490,11 +506,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestASinD;
+procedure TestTMathParser.TestASinD;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'ASinD(0.5)';
     Expected    := 30;
@@ -503,12 +519,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestASinD2;
+procedure TestTMathParser.TestASinD2;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'ASinD(RadToDeg(-1.1))';
     R                  := ParserResult;
@@ -528,11 +544,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestATan;
+procedure TestTMathParser.TestATan;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'ATan(0.5)';
     Expected    := 0.46365;
@@ -541,11 +557,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestATanD;
+procedure TestTMathParser.TestATanD;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'ATanD(0.5)';
     Expected    := 26.56505;
@@ -554,11 +570,39 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestCeil;
+procedure TestTMathParser.TestBrackekts;
+var
+Expected, ReturnValue  : Double;
+begin
+  with FMathParser do
+  begin
+    Expression  := '((4+5)6)7';
+    Expected    := 378;
+    ReturnValue := ParserResult;
+    CheckEquals(Expected, ReturnValue, Expression);
+  end;
+  with FMathParser do
+  begin
+    Expression  := '7(6(4+5))';
+    Expected    := 378;
+    ReturnValue := ParserResult;
+    CheckEquals(Expected, ReturnValue, Expression);
+  end;
+  with FMathParser do
+  begin
+    Expression  := '(4+5)(3+3)';
+    Expected    := 54;
+    ReturnValue := ParserResult;
+    CheckEquals(Expected, ReturnValue, Expression);
+  end;
+
+end;
+
+procedure TestTMathParser.TestCeil;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Ceil(2,1)';
     Expected    := 3;
@@ -566,7 +610,7 @@ begin
     CheckEquals(Expected, ReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Ceil(-2,1)';
     Expected    := -2;
@@ -575,11 +619,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestCos;
+procedure TestTMathParser.TestCos;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Cos(2*pi)';
     Expected    := 1;
@@ -588,11 +632,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestCosD;
+procedure TestTMathParser.TestCosD;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'CosD(360)';
     Expected    := 1;
@@ -601,18 +645,18 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestDegToRad;
+procedure TestTMathParser.TestDegToRad;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'DegToRad(90)';
     Expected    := pi / 2;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, 0.00001, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Sin(DegToRad(90))';
     Expected    := 1;
@@ -621,11 +665,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestDiv;
+procedure TestTMathParser.TestDiv;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '3 / 2';
     Expected    := 1.5;
@@ -634,12 +678,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestDiv2;
+procedure TestTMathParser.TestDiv2;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := '3 / 0';
     R                  := ParserResult;
@@ -651,18 +695,18 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.Teste10;
+procedure TestTMathParser.Teste10;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '1e3';
     Expected    := 1000;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, 0.00001, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '1e10';
     Expected    := 10000000000;
@@ -670,7 +714,7 @@ begin
     CheckEquals(Expected, ReturnValue, 0.00001, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Max(1, 2)e3';
     Expected    := 2000;
@@ -679,12 +723,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestError;
+procedure TestTMathParser.TestError;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression := 'Abs(3, 4, 5) + Abs(4, 5)';
     R          := ParserResult;
@@ -695,7 +739,7 @@ begin
     CheckError(EExpected, FResultError);
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression := 'Abs()';
     R          := ParserResult;
@@ -706,7 +750,7 @@ begin
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression := '*3';
     R          := ParserResult;
@@ -717,7 +761,7 @@ begin
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression := '(*3)';
     R          := ParserResult;
@@ -728,7 +772,7 @@ begin
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := 'Abs +5)';
@@ -741,7 +785,7 @@ begin
     CheckError(EExpected, EReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := 'Abs )';
@@ -753,7 +797,7 @@ begin
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := 'Abs 5)';
@@ -765,7 +809,7 @@ begin
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Variables.Add('a', 12);
@@ -778,7 +822,7 @@ begin
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := 'Abs +3)';
@@ -790,7 +834,7 @@ begin
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := 'Max ,3)';
@@ -802,7 +846,7 @@ begin
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := 'Abs(5*)';
@@ -814,7 +858,7 @@ begin
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := 'Abs(5,)';
@@ -827,7 +871,7 @@ begin
     CheckError(EExpected, EReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := '(5 (3)';
@@ -839,7 +883,7 @@ begin
     EReturnValue := GetLastError;
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := '(5 + 3))';
@@ -852,7 +896,7 @@ begin
     CheckError(EExpected, EReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := '5 +';
@@ -865,7 +909,7 @@ begin
     CheckError(EExpected, EReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := ', 5';
@@ -878,7 +922,7 @@ begin
     CheckError(EExpected, EReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := '(,)';
@@ -891,7 +935,7 @@ begin
     CheckError(EExpected, EReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := '+,';
@@ -904,7 +948,7 @@ begin
     CheckError(EExpected, EReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := '(5,,)';
@@ -917,7 +961,7 @@ begin
     CheckError(EExpected, EReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     FResultError.Clear;
     Expression := 'Abs(5, 6, 7)';
@@ -931,11 +975,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestExp;
+procedure TestTMathParser.TestExp;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Exp(1)';
     Expected    := 2.718281;
@@ -944,11 +988,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestFloor;
+procedure TestTMathParser.TestFloor;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Floor(2.2)';
     Expected    := 2;
@@ -956,7 +1000,7 @@ begin
     CheckEquals(Expected, ReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Floor(-2.2)';
     Expected    := -3;
@@ -965,11 +1009,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestFrac;
+procedure TestTMathParser.TestFrac;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Frac(1.501)';
     Expected    := 0.501;
@@ -978,11 +1022,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestInt;
+procedure TestTMathParser.TestInt;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Int(1.501)';
     Expected    := 1;
@@ -991,11 +1035,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestLdexp;
+procedure TestTMathParser.TestLdexp;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Ldexp(2, 3)';
     Expected    := 16;
@@ -1004,11 +1048,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestLn;
+procedure TestTMathParser.TestLn;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Ln(1000)';
     Expected    := 6.90775;
@@ -1017,12 +1061,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestLn2;
+procedure TestTMathParser.TestLn2;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'Ln(0)';
     R                  := ParserResult;
@@ -1033,11 +1077,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestLnXP1;
+procedure TestTMathParser.TestLnXP1;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'LnXP1(1)';
     Expected    := 0.69315;
@@ -1046,12 +1090,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestLnXP12;
+procedure TestTMathParser.TestLnXP12;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'LnXP1(-1)';
     R                  := ParserResult;
@@ -1062,11 +1106,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestLog10;
+procedure TestTMathParser.TestLog10;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Log10(1000)';
     Expected    := 3;
@@ -1075,12 +1119,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestLog102;
+procedure TestTMathParser.TestLog102;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'Log10(0)';
     R                  := ParserResult;
@@ -1091,11 +1135,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestLogN;
+procedure TestTMathParser.TestLogN;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'LogN(3, 2)';
     Expected    := 0.63093;
@@ -1104,12 +1148,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestLogN2;
+procedure TestTMathParser.TestLogN2;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'LogN(0, 1)';
     R                  := ParserResult;
@@ -1118,7 +1162,7 @@ begin
     EReturnValue       := GetLastError;
     CheckError(EExpected, EReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'LogN(1, 0)';
     R                  := ParserResult;
@@ -1129,18 +1173,40 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestPower;
+procedure TestTMathParser.TestPerformance;
+begin
+  CheckPerformance(
+    procedure
+    var
+      R: Double;
+      i: Integer;
+      MP: TMathParser;
+    begin
+      MP := TMathParser.Create;
+      try
+        for i := 1 to 100000 do
+        begin
+          MP.Expression := 'Max(3+5, 4, 5) + Min(3, 4, 5) + ((4+5)6)7 + ((4+5)6)7';
+          R := MP.ParserResult;
+        end;
+      finally
+        MP.Free;
+      end;
+    end, 10, 50);
+end;
+
+procedure TestTMathParser.TestPower;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '6^2';
     Expected    := 36;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Max(2, 3)^2';
     Expected    := 9;
@@ -1149,11 +1215,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestPower10;
+procedure TestTMathParser.TestPower10;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '-2^-2';
     Expected    := 0.25;
@@ -1162,12 +1228,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestPower2;
+procedure TestTMathParser.TestPower2;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := '-2^2.2';
     R                  := ParserResult;
@@ -1178,18 +1244,18 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestRadToDeg;
+procedure TestTMathParser.TestRadToDeg;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'RadToDeg(pi/2)';
     Expected    := 90;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, 0.00001, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'SinD(RadToDeg(pi/2))';
     Expected    := 1;
@@ -1198,11 +1264,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestRoundTo;
+procedure TestTMathParser.TestRoundTo;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'RoundTo(-25,346 , -2)';
     Expected    := -25.35;
@@ -1211,25 +1277,25 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestSign;
+procedure TestTMathParser.TestSign;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Sign(50,22)';
     Expected    := 1;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Sign(-50,22)';
     Expected    := -1;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Sign(0)';
     Expected    := 0;
@@ -1238,11 +1304,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestSin;
+procedure TestTMathParser.TestSin;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Sin(pi/2)';
     Expected    := 1;
@@ -1251,11 +1317,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestSinD;
+procedure TestTMathParser.TestSinD;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'SinD(90)';
     Expected    := 1;
@@ -1264,11 +1330,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestSqr;
+procedure TestTMathParser.TestSqr;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Sqr(2)';
     Expected    := 4;
@@ -1277,11 +1343,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestSqrt;
+procedure TestTMathParser.TestSqrt;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Sqrt(2)';
     Expected    := 1.41442;
@@ -1290,12 +1356,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestSqrt2;
+procedure TestTMathParser.TestSqrt2;
 var
   R                      : Double;
   EExpected, EReturnValue: TError;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression         := 'Sqrt(-1)';
     R                  := ParserResult;
@@ -1306,7 +1372,7 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestStream;
+procedure TestTMathParser.TestStream;
 const
   cFormel = '5 - 2';
 var
@@ -1316,7 +1382,7 @@ var
   ReturnValue   : Double;
   s             : TMemoryStream;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression := cFormel;
     s          := TMemoryStream.Create;
@@ -1332,7 +1398,7 @@ begin
     CheckEquals(ExpectedString, ReturnString);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression := cFormel;
     s          := TMemoryStream.Create;
@@ -1349,11 +1415,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestSub;
+procedure TestTMathParser.TestSub;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := '5 - 2';
     Expected    := 3;
@@ -1362,11 +1428,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestSum;
+procedure TestTMathParser.TestSum;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Sum(3, 2,55, 3.2)';
     Expected    := 8.75;
@@ -1375,11 +1441,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestTan;
+procedure TestTMathParser.TestTan;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'Tan(pi/4)';
     Expected    := 1;
@@ -1388,11 +1454,11 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestTanD;
+procedure TestTMathParser.TestTanD;
 var
   Expected, ReturnValue: Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Expression  := 'TanD(45)';
     Expected    := 1;
@@ -1401,12 +1467,12 @@ begin
   end;
 end;
 
-procedure TestTcyMathParser.TestVariables;
+procedure TestTMathParser.TestVariables;
 var
   Expected, ReturnValue: Double;
   Test                 : Double;
 begin
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('A', 5);
     Variables.Add('b', 3);
@@ -1415,7 +1481,23 @@ begin
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+
+  with FMathParser do
+  begin
+    Expression := 'a + b';
+    Variables.Add('A', 5);
+    Variables.Add('b', 3);
+
+    Expected    := 8;
+    ReturnValue := ParserResult;
+    CheckEquals(Expected, ReturnValue, Expression);
+    Variables['A'] := 7;
+    Expected       := 10;
+    ReturnValue    := ParserResult;
+    CheckEquals(Expected, ReturnValue, Expression);
+  end;
+
+  with FMathParser do
   begin
     Variables.Add('A',
       function: Double
@@ -1432,7 +1514,7 @@ begin
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, Expression);
   end;
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('A',
       function: Double
@@ -1446,7 +1528,7 @@ begin
     CheckEquals(Expected, ReturnValue, Expression);
   end;
 
-  with FcyMathParser do
+  with FMathParser do
   begin
     Variables.Add('A',
       function: Double
@@ -1471,6 +1553,6 @@ end;
 initialization
 
 ReportMemoryLeaksOnShutdown := True;
-RegisterTest(TestTcyMathParser.Suite);
+RegisterTest(TestTMathParser.Suite);
 
 end.

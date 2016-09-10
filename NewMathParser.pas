@@ -5,6 +5,7 @@
 /// Viel geändert von Jens Biermann am 07.02.2012
 /// Viel geändert von Jens Biermann am 29.01.2015
 /// Änderungen von Jens Biermann am 23.08.2016
+/// TParserStack to TList and Bugfix 10.09.2016
 
 unit NewMathParser;
 
@@ -15,13 +16,24 @@ uses System.Classes, System.Generics.Collections, NewMathParser.Oper, System.Sys
 type
   TNotifyError = Procedure(Sender: TObject; Error: TError) of object;
 
+  TParserStack = class(TList<TParserItem>)
+  strict private
+  public
+    procedure ClearAndFree;
+    procedure SetArgCount;
+    function ArgCount(const SI: TParserItem): Integer;
+    function CountLeftBracket: Integer;
+    function CountRightBracket: Integer;
+    function ContainsVariable: Boolean;
+  end;
+
   TProzessbasis = class(TObject)
   strict protected
-    FStack     : TStack<TParserItem>;
+    FStack     : TParserStack;
     FError     : PError;
     FOperations: TOperatoren;
   public
-    constructor Create(AStack: TStack<TParserItem>; AOperations: TOperatoren; AError: PError);
+    constructor Create(AStack: TParserStack; AOperations: TOperatoren; AError: PError);
     // destructor Destroy; override;
     procedure Prozess; virtual; abstract;
     property Error: PError read FError;
@@ -44,20 +56,14 @@ type
 
   TValidate = class(TProzessbasis)
   strict private
-    FPos         : Integer;
-    FValidateList: TList<TParserItem>;
-    procedure ValidateRightBracket;
-    procedure ValidateSeparator;
-    procedure ValidateOperator;
-    procedure ListToStack;
+    procedure ValidateRightBracket(const Pos: Integer);
+    procedure ValidateSeparator(const Pos: Integer);
+    procedure ValidateOperator(const Pos: Integer);
     procedure CheckBracketError;
-    procedure Clear;
     procedure Loop;
     procedure CleanPlusMinus;
     procedure InsertMulti;
   public
-    constructor Create(AStack: TStack<TParserItem>; AOperations: TOperatoren; AError: PError);
-    destructor Destroy; override;
     procedure Prozess; override;
   end;
 
@@ -70,15 +76,13 @@ type
     procedure MoveOperator(Current: TParserItem);
     procedure CreateNewStack;
   public
-    constructor Create(AStack: TStack<TParserItem>; AOperations: TOperatoren; AError: PError);
+    constructor Create(AStack: TParserStack; AOperations: TOperatoren; AError: PError);
     destructor Destroy; override;
     procedure Prozess; override;
   end;
 
   TCountArguments = class(TProzessbasis)
   strict private
-    SS: TArray<TParserItem>;
-    function AgrumentCount(APos: Integer): Integer;
     procedure CheckError;
     procedure CountArg;
   public
@@ -95,7 +99,7 @@ type
     function SetResult: Double;
     procedure StackToResult_Variable(Current: TParserItem);
   public
-    constructor Create(AStack: TStack<TParserItem>; AOperations: TOperatoren; AError: PError);
+    constructor Create(AStack: TParserStack; AOperations: TOperatoren; AError: PError);
     destructor Destroy; override;
     function calcResult: Double;
     property Variables: TVariables read FVariables write FVariables;
@@ -105,8 +109,8 @@ type
   private
     FResult    : Double;
     FError     : TError;
-    FTmpStack  : TObjectList<TParserItem>;
-    FMainStack : TStack<TParserItem>;
+    FTmpStack  : TParserStack;
+    FMainStack : TParserStack;
     FExpression: string;
     FOnError   : TNotifyError;
     FVariables : TVariables;
@@ -117,7 +121,6 @@ type
     FPriority  : TPriority;
     FCountArgs : TCountArguments;
     FOperations: TOperatoren;
-    function ContainsVariable: Boolean;
     procedure SaveStack;
     procedure tmpToStack;
     function GetParserResult: Double;
@@ -129,6 +132,7 @@ type
     destructor Destroy; override;
     function GetLastError: TError;
     function GetLastErrorString: string;
+    // dont use stream!
     procedure SaveToStream(S: TStream);
     procedure LoadFromStream(S: TStream);
     property Expression: string read FExpression write SetExpression;
@@ -139,6 +143,21 @@ type
 
 implementation
 
+// var
+// MP   : TMathParser;
+// Error: TError;
+// begin
+// MP := TMathParser.Create;
+// try
+// MP.Expression := '((4+5)6)7 + Min(3, 4, 5)';
+// Error         := TError;
+// if Error.IsNoError then
+// ShowMessage(MP.ParserResult.ToString);
+// finally
+// MP.Free;
+// end;
+// end;
+
 constructor TMathParser.Create;
 begin
   inherited;
@@ -146,8 +165,8 @@ begin
   FError.Clear;
   FIsToCalc   := False;
   FOperations := TOperatoren.Create;
-  FMainStack  := TStack<TParserItem>.Create;
-  FTmpStack   := TObjectList<TParserItem>.Create;
+  FMainStack  := TParserStack.Create;
+  FTmpStack   := TParserStack.Create;
   FVariables  := TVariables.Create;
   FVariables.Add('pi', Pi);
   FCalculator           := TCalculator.Create(FMainStack, FOperations, @FError);
@@ -173,9 +192,11 @@ begin
   FValidate.Free;
 
   FCalculator.Free;
+  FTmpStack.ClearAndFree;
   FTmpStack.Free;
-  ClearAndFreeStack(FMainStack);
+  FMainStack.ClearAndFree;
   FMainStack.Free;
+
   FVariables.Free;
   FOperations.Free;
   inherited;
@@ -191,7 +212,7 @@ procedure TMathParser.SetExpression(const Value: string);
 begin
   if not SameStr(FExpression, Value) then
   begin
-    FTmpStack.Clear;
+    FTmpStack.ClearAndFree;
     FResult     := 0;
     FExpression := Value;
     FError.Clear;
@@ -205,7 +226,7 @@ end;
 
 function TMathParser.GetParserResult: Double;
 begin
-  if FIsToCalc or ContainsVariable then
+  if FIsToCalc or FMainStack.ContainsVariable or FTmpStack.ContainsVariable then
   begin
     if FMainStack.Count > 0 then
       SaveStack
@@ -218,24 +239,11 @@ begin
   Result := FResult;
 end;
 
-function TMathParser.ContainsVariable: Boolean;
-var
-  iItem: TParserItem;
-begin
-  for iItem in FMainStack do
-    if iItem.TypeStack = tsVariable then
-      Exit(True);
-  for iItem in FTmpStack do
-    if iItem.TypeStack = tsVariable then
-      Exit(True);
-  Result := False;
-end;
-
 procedure TMathParser.SaveStack;
 var
   iItem, tmp: TParserItem;
 begin
-  FTmpStack.Clear;
+  FTmpStack.ClearAndFree;
   for iItem in FMainStack do
   begin
     tmp := TParserItem.Create;
@@ -252,7 +260,7 @@ begin
   begin
     tmp := TParserItem.Create;
     tmp.Assign(iItem);
-    FMainStack.Push(tmp);
+    FMainStack.Add(tmp);
   end;
 end;
 
@@ -260,7 +268,6 @@ procedure TMathParser.SaveToStream(S: TStream);
 var
   c     : Integer;
   SI    : TParserItem;
-  SS    : TArray<TParserItem>;
   StrBuf: TBytes;
 begin
   StrBuf := TEncoding.UTF8.GetBytes(FExpression);
@@ -271,8 +278,7 @@ begin
   S.WriteBuffer(FError, SizeOf(Integer));
   c := FMainStack.Count;
   S.WriteBuffer(c, SizeOf(Integer));
-  SS := FMainStack.ToArray;
-  for SI in SS do
+  for SI in FMainStack do
     SI.Write(S);
 end;
 
@@ -298,19 +304,21 @@ begin
   end;
 
   S.ReadBuffer(FError, SizeOf(Integer));
-  ClearAndFreeStack(FMainStack);
+  FMainStack.ClearAndFree;
+
   S.ReadBuffer(c, SizeOf(Integer));
   for i := 0 to c - 1 do
   begin
     SI := TParserItem.Create;
     SI.Read(S);
-    FMainStack.Push(SI);
+    FMainStack.Add(SI);
   end;
 end;
 
 procedure TMathParser.CreateStack;
 begin
-  ClearAndFreeStack(FMainStack);
+  FMainStack.ClearAndFree;
+
   FParser.Expression := FExpression.ToLower;
   FParser.Prozess;
   FValidate.Prozess;
@@ -331,28 +339,14 @@ end;
 
 { TPostProzess_Validate }
 
-constructor TValidate.Create(AStack: TStack<TParserItem>; AOperations: TOperatoren; AError: PError);
-begin
-  inherited;
-  FValidateList := TList<TParserItem>.Create;
-end;
-
-destructor TValidate.Destroy;
-begin
-  FValidateList.Free;
-  inherited;
-end;
-
 procedure TValidate.Prozess;
 begin
   if FError^.IsNoError then
   begin
-    Clear;
     CheckBracketError;
     CleanPlusMinus;
     InsertMulti;
     Loop;
-    ListToStack;
   end;
 end;
 
@@ -362,56 +356,33 @@ const
 var
   i: Integer;
 begin
-  for i := FValidateList.Count - 1 downto 0 do
-    if ((i = 0) or (FValidateList[i - 1].TypeStack in STypes)) then
-      if SameStr(FValidateList[i].Name, '+') then
-        FValidateList.Extract(FValidateList[i]).Free
-      else if SameStr(FValidateList[i].Name, '-') then
-        FValidateList[i].Name := 'neg';
-end;
-
-procedure TValidate.Clear;
-begin
-  FValidateList.Clear;
-  FValidateList.AddRange(FStack);
+  for i := FStack.Count - 1 downto 0 do
+    if (i = 0) or (FStack[i - 1].TypeStack in STypes) then
+      if SameStr(FStack[i].Name, '+') then
+        FStack.Extract(FStack[i]).Free
+      else if SameStr(FStack[i].Name, '-') then
+        FStack[i].Name := 'neg';
 end;
 
 procedure TValidate.CheckBracketError;
 var
-  SI                : TParserItem;
-  LeftBracketCount  : Integer;
-  FRightBracketCount: Integer;
+  LeftBracketCount : Integer;
+  RightBracketCount: Integer;
 begin
-  LeftBracketCount   := 0;
-  FRightBracketCount := 0;
-  for SI in FValidateList do
-    case SI.TypeStack of
-      tsLeftBracket:
-        Inc(LeftBracketCount);
-      tsRightBracket:
-        Inc(FRightBracketCount);
-    end;
+  LeftBracketCount  := FStack.CountLeftBracket;
+  RightBracketCount := FStack.CountRightBracket;
 
-  if LeftBracketCount > FRightBracketCount then
+  if LeftBracketCount > RightBracketCount then
   begin
     FError^.Code     := cErrorMissingRightBrackets;
     FError^.Position := -1;
   end
 
-  else if LeftBracketCount < FRightBracketCount then
+  else if LeftBracketCount < RightBracketCount then
   begin
     FError^.Code     := cErrorMissingLeftBrackets;
     FError^.Position := -1;
   end;
-end;
-
-procedure TValidate.ListToStack;
-var
-  iPI: TParserItem;
-begin
-  FStack.Clear;
-  for iPI in FValidateList do
-    FStack.Push(iPI);
 end;
 
 procedure TValidate.InsertMulti;
@@ -421,82 +392,84 @@ const
 var
   i: Integer;
 begin
-  for i := 1 to FValidateList.Count - 1 do
-    if (FValidateList[i].TypeStack in Types1) and (FValidateList[i - 1].TypeStack in Types2) then
-      FValidateList.Insert(i, TParserItem.Create('*', FValidateList[i].TextPos));
+  for i := FStack.Count - 2 downto 0 do
+    if (FStack[i].TypeStack in Types2) and (FStack[i + 1].TypeStack in Types1) then
+      FStack.Insert(i + 1, TParserItem.Create('*', FStack[i].TextPos));
 end;
 
 procedure TValidate.Loop;
+var
+  i: Integer;
 begin
-  FPos := 0;
-  while (FError^.IsNoError) and (FPos < FValidateList.Count) do
+  i := 0;
+  while (FError^.IsNoError) and (i < FStack.Count) do
   begin
-    case FValidateList[FPos].TypeStack of
+    case FStack[i].TypeStack of
       tsRightBracket:
-        ValidateRightBracket;
+        ValidateRightBracket(i);
 
       tsSeparator:
-        ValidateSeparator;
+        ValidateSeparator(i);
 
       tsOperator:
-        ValidateOperator;
+        ValidateOperator(i);
     end;
-    Inc(FPos);
+    Inc(i);
   end;
 end;
 
-procedure TValidate.ValidateOperator;
+procedure TValidate.ValidateOperator(const Pos: Integer);
 begin
-  if (FPos = 0) or (FValidateList[FPos - 1].TypeStack in [tsOperator, tsLeftBracket, tsSeparator]) then
+  if (Pos = 0) or (FStack[Pos - 1].TypeStack in [tsOperator, tsLeftBracket, tsSeparator]) then
   begin
-    if (FValidateList[FPos].Name.Length = 1) and CharInSet(FValidateList[FPos].Name[1], ['/', '*', '^', '%']) then
+    if (FStack[Pos].Name.Length = 1) and CharInSet(FStack[Pos].Name[1], ['/', '*', '^', '%']) then
     begin
       FError^.Code     := cErrorOperator;
-      FError^.Position := FValidateList[FPos].TextPos;
+      FError^.Position := FStack[Pos].TextPos;
     end;
   end
 
-  else if (FPos = FValidateList.Count - 1) then
+  else if (Pos = FStack.Count - 1) then
   begin
     FError^.Code     := cErrorOperatorNeedArgument;
-    FError^.Position := FValidateList[FPos].TextPos;
+    FError^.Position := FStack[Pos].TextPos;
   end;
 end;
 
-procedure TValidate.ValidateRightBracket;
+procedure TValidate.ValidateRightBracket(const Pos: Integer);
 begin
-  if (FPos > 0) and (FValidateList[FPos - 1].TypeStack in [tsFunction, tsOperator, tsSeparator]) then
+  if (Pos > 0) and (FStack[Pos - 1].TypeStack in [tsFunction, tsOperator, tsSeparator]) then
   begin
     FError^.Code     := cErrorRightBracket;
-    FError^.Position := FValidateList[FPos].TextPos;
+    FError^.Position := FStack[Pos].TextPos;
   end;
 end;
 
-procedure TValidate.ValidateSeparator;
+procedure TValidate.ValidateSeparator(const Pos: Integer);
 begin
-  if FPos = 0 then
+  if Pos = 0 then
   begin
     FError^.Code     := cErrorSeparator;
-    FError^.Position := FValidateList[FPos].TextPos;
+    FError^.Position := FStack[Pos].TextPos;
   end
   else
-    case FValidateList[FPos - 1].TypeStack of
+    case FStack[Pos - 1].TypeStack of
       tsSeparator:
         begin
           FError^.Code     := cErrorSeparatorNeedArgument;
-          FError^.Position := FValidateList[FPos].TextPos;
+          FError^.Position := FStack[Pos].TextPos;
         end;
       tsOperator, tsLeftBracket:
         begin
           FError^.Code     := cErrorSeparator;
-          FError^.Position := FValidateList[FPos].TextPos;
+          FError^.Position := FStack[Pos].TextPos;
         end;
     end;
 end;
 
 { TProzessbasis }
 
-constructor TProzessbasis.Create(AStack: TStack<TParserItem>; AOperations: TOperatoren; AError: PError);
+constructor TProzessbasis.Create(AStack: TParserStack; AOperations: TOperatoren; AError: PError);
 begin
   inherited Create;
   FOperations := AOperations;
@@ -538,7 +511,7 @@ begin
   end;
 
   if TryStrToFloat(S, v) then
-    FStack.Push(TParserItem.Create(v, FPos));
+    FStack.Add(TParserItem.Create(v, FPos));
 end;
 
 procedure TParser.Prozess;
@@ -554,13 +527,13 @@ begin
       case FExpression[FPos] of
         '(', '{', '[':
           begin
-            Push(TParserItem.Create(FExpression[FPos], FPos));
+            Add(TParserItem.Create(FExpression[FPos], FPos));
             Inc(FPos);
           end;
 
         ')', '}', ']':
           begin
-            Push(TParserItem.Create(FExpression[FPos], FPos));
+            Add(TParserItem.Create(FExpression[FPos], FPos));
             Inc(FPos);
           end;
 
@@ -572,13 +545,13 @@ begin
 
         ';':
           begin
-            Push(TParserItem.Create(tsSeparator, FPos));
+            Add(TParserItem.Create(tsSeparator, FPos));
             Inc(FPos);
           end;
 
         '-', '+', '/', '*', '^', '%':
           begin
-            Push(TParserItem.Create(FExpression[FPos], FPos));
+            Add(TParserItem.Create(FExpression[FPos], FPos));
             Inc(FPos);
           end;
 
@@ -624,9 +597,9 @@ end;
 
 procedure TParser.PushExponent(AExponent: Integer);
 begin
-  FStack.Push(TParserItem.Create('*', FPos));
-  FStack.Push(TParserItem.Create(AExponent, FPos));
-  FStack.Push(TParserItem.Create('^', FPos));
+  FStack.Add(TParserItem.Create('*', FPos));
+  FStack.Add(TParserItem.Create(AExponent, FPos));
+  FStack.Add(TParserItem.Create('^', FPos));
 end;
 
 procedure TParser.PushFunctionVariable(AText: string);
@@ -635,14 +608,14 @@ var
 begin
   Op := FOperations[AText];
   if Assigned(Op) then
-    FStack.Push(TParserItem.Create(Op.Name, FPos - Length(AText)))
+    FStack.Add(TParserItem.Create(Op.Name, FPos - Length(AText)))
   else
-    FStack.Push(TParserItem.Create(tsVariable, FPos - Length(AText), AText));
+    FStack.Add(TParserItem.Create(tsVariable, FPos - Length(AText), AText));
 end;
 
 { TPostProzess_Priority }
 
-constructor TPriority.Create(AStack: TStack<TParserItem>; AOperations: TOperatoren; AError: PError);
+constructor TPriority.Create(AStack: TParserStack; AOperations: TOperatoren; AError: PError);
 begin
   inherited;
   FPStack   := TStack<TParserItem>.Create;
@@ -658,15 +631,13 @@ end;
 
 procedure TPriority.Prozess;
 var
-  SS : TArray<TParserItem>;
   iSS: TParserItem;
 begin
   if FError^.IsNoError then
   begin
     FTmpStack.Clear;
     FPStack.Clear;
-    SS := FStack.ToArray;
-    for iSS in SS do
+    for iSS in FStack do
     begin
       case iSS.TypeStack of
         tsValue, tsVariable:
@@ -696,8 +667,7 @@ begin
   while FTmpStack.Count > 0 do
     FPStack.Push(FTmpStack.Pop);
   FStack.Clear;
-  for SI in FPStack.ToArray do
-    FStack.Push(SI);
+  FStack.AddRange(FPStack);
 end;
 
 procedure TPriority.MoveOperator(Current: TParserItem);
@@ -730,58 +700,32 @@ end;
 
 { TPostProzess_CountArguments }
 
-function TCountArguments.AgrumentCount(APos: Integer): Integer;
-var
-  c: Integer;
-  i: Integer;
-begin
-  c      := 0;
-  Result := 0;
-  i      := APos + 1;
-  while (i < Length(SS)) and (c > 0) or (i = APos + 1) do
-  begin
-    case SS[i].TypeStack of
-      tsSeparator:
-        if c = 1 then
-          Inc(Result);
-      tsLeftBracket:
-        Inc(c);
-      tsRightBracket:
-        begin
-          if c = 1 then
-            Inc(Result);
-          Dec(c);
-        end;
-    end;
-    Inc(i);
-  end;
-end;
-
 procedure TCountArguments.CheckError;
 var
   i, c: Integer;
 begin
-  for i := 0 to Length(SS) - 1 do
-    if (FError^.IsNoError) and (SS[i].TypeStack in [tsFunction, tsOperator]) then
+  for i := 0 to FStack.Count - 1 do
+    if (FError^.IsNoError) and (FStack[i].TypeStack in [tsFunction, tsOperator]) then
     begin
-      c := FOperations[SS[i].Name].Arguments;
-      if (SS[i].ArgumentsCount > c) and (c > -1) or (c > -1) and (SS[i].ArgumentsCount = 0) then
+      c := FOperations[FStack[i].Name].Arguments;
+      if (FStack[i].ArgumentsCount > c) and (c > -1) or (c > -1) and (FStack[i].ArgumentsCount = 0) then
       begin
         FError^.Code     := cErrorToManyArgs;
-        FError^.Position := SS[i].TextPos;
+        FError^.Position := FStack[i].TextPos;
       end
 
-      else if SS[i].ArgumentsCount < c then
+      else if FStack[i].ArgumentsCount < c then
       begin
         FError^.Code     := cErrorNotEnoughArgs;
-        FError^.Position := SS[i].TextPos;
+        FError^.Position := FStack[i].TextPos;
       end
 
-      else if (i < Length(SS) - 2) and (SS[i + 1].TypeStack = tsLeftBracket) and (SS[i + 2].TypeStack = tsRightBracket) then
+      else if (i < FStack.Count - 2) and (FStack[i + 1].TypeStack = tsLeftBracket) and
+        (FStack[i + 2].TypeStack = tsRightBracket) then
       begin
-        SS[i].ArgumentsCount := 0;
-        FError^.Code         := cErrorNotEnoughArgs;
-        FError^.Position     := SS[i].TextPos;
+        FStack[i].ArgumentsCount := 0;
+        FError^.Code             := cErrorNotEnoughArgs;
+        FError^.Position         := FStack[i].TextPos;
       end;
     end;
 end;
@@ -790,7 +734,7 @@ procedure TCountArguments.Prozess;
 begin
   if FError^.IsNoError then
   begin
-    SS := FStack.ToArray;
+    FStack.SetArgCount;
     CountArg;
     CheckError;
   end;
@@ -798,25 +742,16 @@ end;
 
 procedure TCountArguments.CountArg;
 var
-  i  : Integer;
   iSS: TParserItem;
 begin
-  i := 0;
-  for iSS in SS do
-  begin
-    case iSS.TypeStack of
-      tsFunction:
-        iSS.ArgumentsCount := AgrumentCount(i);
-      tsOperator:
-        iSS.ArgumentsCount := FOperations[iSS.Name].Arguments;
-    end;
-    Inc(i);
-  end;
+  for iSS in FStack do
+    if iSS.TypeStack = tsOperator then
+      iSS.ArgumentsCount := FOperations[iSS.Name].Arguments;
 end;
 
 { TCalculator }
 
-constructor TCalculator.Create(AStack: TStack<TParserItem>; AOperations: TOperatoren; AError: PError);
+constructor TCalculator.Create(AStack: TParserStack; AOperations: TOperatoren; AError: PError);
 begin
   inherited;
   FResultStack := TStack<TParserItem>.Create;
@@ -854,9 +789,9 @@ end;
 
 procedure TCalculator.StackToResult_Operation(ACurrent: TParserItem);
 var
-  O: TOperator;
-  R: TParserItem;
-  i: Integer;
+  O    : TOperator;
+  R    : TParserItem;
+  i    : Integer;
   Error: Integer;
 begin
   FValues.Clear;
@@ -873,7 +808,7 @@ begin
     FResultStack.Push(TParserItem.Create(O.Func(FValues.ToArray), ACurrent.TextPos))
   else
   begin
-    FError^.Code := Error;
+    FError^.Code     := Error;
     FError^.Position := ACurrent.TextPos;
   end;
   ACurrent.Free;
@@ -897,7 +832,7 @@ begin
     FResultStack.Push(TParserItem.Create(aValue, Current.TextPos))
   else
   begin
-    FError^.Code := cErrorUnknownName;
+    FError^.Code     := cErrorUnknownName;
     FError^.Position := Current.TextPos;
   end;
   Current.Free;
@@ -916,11 +851,91 @@ begin
   end
   else if FError^.IsNoError then
   begin
-    FError^.Code := cInternalError;
+    FError^.Code     := cInternalError;
     FError^.Position := -1;
   end
   else
     ClearAndFreeStack(FResultStack);
+end;
+
+{ TParserStack }
+
+function TParserStack.ArgCount(const SI: TParserItem): Integer;
+var
+  Pos: Integer;
+  c  : Integer;
+  i  : Integer;
+begin
+  Pos    := IndexOf(SI);
+  c      := 0;
+  Result := 0;
+  for i  := Pos + 1 to Count - 1 do
+  begin
+    case Self[i].TypeStack of
+      tsSeparator:
+        if c = 1 then
+          Inc(Result);
+      tsLeftBracket:
+        Inc(c);
+      tsRightBracket:
+        begin
+          if c = 1 then
+          begin
+            Inc(Result);
+            Break;
+          end;
+          Dec(c);
+        end;
+    end;
+  end;
+end;
+
+procedure TParserStack.ClearAndFree;
+var
+  iItems: TParserItem;
+begin
+  for iItems in Self do
+    iItems.Free;
+  Clear;
+end;
+
+function TParserStack.ContainsVariable: Boolean;
+var
+  iItem: TParserItem;
+begin
+  for iItem in Self do
+    if iItem.TypeStack = tsVariable then
+      Exit(True);
+  Result := False;
+end;
+
+function TParserStack.CountLeftBracket: Integer;
+var
+  iItems: TParserItem;
+begin
+  Result := 0;
+  for iItems in Self do
+    if iItems.TypeStack = tsLeftBracket then
+      Inc(Result);
+end;
+
+function TParserStack.CountRightBracket: Integer;
+var
+  iItems: TParserItem;
+begin
+  Result := 0;
+  for iItems in Self do
+    if iItems.TypeStack = tsRightBracket then
+      Inc(Result);
+end;
+
+procedure TParserStack.SetArgCount;
+var
+  iItems: TParserItem;
+begin
+  for iItems in Self do
+    if iItems.TypeStack = tsFunction then
+      iItems.ArgumentsCount := ArgCount(iItems);
 end;
 
 end.
