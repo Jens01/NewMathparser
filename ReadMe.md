@@ -8,6 +8,10 @@ Uses „Reverse Polish Notation“ (RPN)
 
 With Unittesting!
 
+32/64-bit, XE7 and newer
+
+inspired by cyMathparser (Cindy Components )
+
 Operators:
 * '+' '-' '*' '/' : plus, minus, multiplication, division
 * '^'             : power
