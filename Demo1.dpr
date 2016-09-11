@@ -17,7 +17,7 @@ begin
     MP := TMathParser.Create;
     try
       MP.Expression := '((4+5)6)7 + Min(3, 4, 5)';
-      Error         := MP.GetLastError;
+      Error         := MP.Error;
       if Error.IsNoError then
         write(MP.ParserResult.ToString)
       else

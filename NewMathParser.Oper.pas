@@ -71,7 +71,7 @@ type
     constructor Create(aPriority: Integer; aArguments: Integer; aName: string; aOpF: TOpFunc); overload;
     constructor Create(aPriority: Integer; aArguments: Integer; aName: string; aOpF: TOpFunc; aIsError: TErrorFunc);
       overload;
-    function IsError(Values: TArray<Double>; var Error: Integer): Boolean;
+    function Error(Values: TArray<Double>): Integer;
     property Name: string read FName write FName;
     property Func: TOpFunc read FFunc write FFunc;
     property Priority: Integer read FPriority write FPriority;
@@ -115,6 +115,7 @@ type
     constructor Create(AName: string; APos: Integer); overload;
     constructor Create(aTypeStack: TTypeStack; APos: Integer; aName: string = ''); overload;
     constructor Create(aValue: Double; APos: Integer); overload;
+    constructor Create(aItem: TParserItem); overload;
     procedure Assign(Source: TObject);
     procedure Write(S: TStream);
     procedure Read(S: TStream);
@@ -184,18 +185,12 @@ begin
   FErrorFunc := aIsError;
 end;
 
-function TOperator.IsError(Values: TArray<Double>; var Error: Integer): Boolean;
+function TOperator.Error(Values: TArray<Double>): Integer;
 begin
-  if not Assigned(FErrorFunc) then
-  begin
-    Error  := cNoError;
-    Result := False;
-  end
+  if Assigned(FErrorFunc) then
+    Result := FErrorFunc(Values)
   else
-  begin
-    Error  := FErrorFunc(Values);
-    Result := not(Error = cNoError);
-  end;
+    Result := cNoError;
 end;
 
 { TOperationen }
@@ -721,19 +716,6 @@ begin
   FTextPos   := APos;
 end;
 
-procedure TParserItem.Assign(Source: TObject);
-begin
-  if Source is TParserItem then
-  begin
-    FValue          := TParserItem(Source).FValue;
-    FTypeStack      := TParserItem(Source).FTypeStack;
-    FName           := TParserItem(Source).FName;
-    FArgumentsCount := TParserItem(Source).FArgumentsCount;
-    FTextPos        := TParserItem(Source).FTextPos;
-  end;
-  inherited;
-end;
-
 constructor TParserItem.Create(aValue: Double; APos: Integer);
 begin
   inherited Create;
@@ -741,6 +723,12 @@ begin
   FTypeStack := tsValue;
   FName      := '';
   FTextPos   := APos;
+end;
+
+constructor TParserItem.Create(aItem: TParserItem);
+begin
+  inherited Create;
+  Self.Assign(aItem);
 end;
 
 constructor TParserItem.Create(AName: string; APos: Integer);
@@ -763,6 +751,19 @@ begin
   end
   else
     FTypeStack := tsFunction;
+end;
+
+procedure TParserItem.Assign(Source: TObject);
+begin
+  if Source is TParserItem then
+  begin
+    FValue          := TParserItem(Source).FValue;
+    FTypeStack      := TParserItem(Source).FTypeStack;
+    FName           := TParserItem(Source).FName;
+    FArgumentsCount := TParserItem(Source).FArgumentsCount;
+    FTextPos        := TParserItem(Source).FTextPos;
+  end;
+  inherited;
 end;
 
 procedure TParserItem.Read(S: TStream);

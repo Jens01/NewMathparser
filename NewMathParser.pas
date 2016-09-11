@@ -16,15 +16,14 @@ uses System.Classes, System.Generics.Collections, NewMathParser.Oper, System.Sys
 type
   TNotifyError = Procedure(Sender: TObject; Error: TError) of object;
 
-  TParserStack = class(TList<TParserItem>)
+  TParserStack = class(TObjectList<TParserItem>)
   strict private
   public
-    procedure ClearAndFree;
+    procedure Clear(const ST: TTypeStack); overload;
     procedure SetArgCount;
     function ArgCount(const SI: TParserItem): Integer;
-    function CountLeftBracket: Integer;
-    function CountRightBracket: Integer;
-    function ContainsVariable: Boolean;
+    function CountType(const ST: TTypeStack): Integer; overload;
+    function Contains(const ST: TTypeStack): Boolean;
   end;
 
   TProzessbasis = class(TObject)
@@ -39,21 +38,6 @@ type
     property Error: PError read FError;
   end;
 
-  TParser = class(TProzessbasis)
-  strict private
-    FPos       : Integer;
-    FExpression: string;
-    procedure PushExponent(AExponent: Integer = 10);
-    procedure PushFunctionVariable(AText: string);
-    procedure ParseNumbers;
-    procedure ParseFunctions;
-    function FunctionOfExpression: string;
-    function NumberOfExpression: string;
-  public
-    procedure Prozess; override;
-    property Expression: string read FExpression write FExpression;
-  end;
-
   TValidate = class(TProzessbasis)
   strict private
     procedure ValidateRightBracket(const Pos: Integer);
@@ -63,6 +47,8 @@ type
     procedure Loop;
     procedure CleanPlusMinus;
     procedure InsertMulti;
+    procedure CountArg;
+    procedure CheckError;
   public
     procedure Prozess; override;
   end;
@@ -81,35 +67,48 @@ type
     procedure Prozess; override;
   end;
 
-  TCountArguments = class(TProzessbasis)
+  TParser = class(TObject)
   strict private
-    procedure CheckError;
-    procedure CountArg;
+  const
+    Numbers = ['0' .. '9'];
+    Letters = ['a' .. 'z'];
+  strict private
+    FStack        : TList<TParserItem>;
+    FError        : PError;
+    FOperations   : TOperatoren;
+    FParsePosition: Integer;
+    FExpression   : string;
+    procedure ParseExponent;
+    procedure ParseNumbers;
+    procedure ParseFunctions;
+    procedure Parse;
   public
-    procedure Prozess; override;
+    constructor Create(AOperations: TOperatoren; AError: PError);
+    destructor Destroy; override;
+    function ExpressionToStack(const Expression: string): TArray<TParserItem>;
   end;
 
-  TCalculator = class(TProzessbasis)
+  TCalculator = class(TObject)
   strict private
     FVariables  : TVariables;
     FResultStack: TStack<TParserItem>;
     FValues     : TList<Double>;
+    FError      : PError;
+    FOperations : TOperatoren;
     procedure StackToResult_Operation(ACurrent: TParserItem);
-    procedure StackToResult;
+    procedure StackToResult(const AStack: TArray<TParserItem>);
     function SetResult: Double;
     procedure StackToResult_Variable(Current: TParserItem);
   public
-    constructor Create(AStack: TParserStack; AOperations: TOperatoren; AError: PError);
+    constructor Create(AOperations: TOperatoren; AVariables: TVariables; AError: PError);
     destructor Destroy; override;
-    function calcResult: Double;
-    property Variables: TVariables read FVariables write FVariables;
+    function calcResult(const AStack: TArray<TParserItem>): Double;
   end;
 
   TMathParser = class(TObject)
   private
     FResult    : Double;
     FError     : TError;
-    FTmpStack  : TParserStack;
     FMainStack : TParserStack;
     FExpression: string;
     FOnError   : TNotifyError;
@@ -119,10 +118,7 @@ type
     FValidate  : TValidate;
     FParser    : TParser;
     FPriority  : TPriority;
-    FCountArgs : TCountArguments;
     FOperations: TOperatoren;
-    procedure SaveStack;
-    procedure tmpToStack;
     function GetParserResult: Double;
     procedure SetExpression(const Value: string);
     procedure DoError(AError: TError);
@@ -130,15 +126,15 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    function GetLastError: TError;
-    function GetLastErrorString: string;
-    // dont use stream!
+    function GetLastError: TError; deprecated 'use Error';
+    // dont use stream! Is quicker to save the Expressionstring
     procedure SaveToStream(S: TStream);
     procedure LoadFromStream(S: TStream);
     property Expression: string read FExpression write SetExpression;
     property ParserResult: Double read GetParserResult;
     property Variables: TVariables read FVariables write FVariables;
     property OnError: TNotifyError read FOnError write FOnError;
+    property Error: TError read FError;
   end;
 
 implementation
@@ -166,11 +162,9 @@ begin
   FIsToCalc   := False;
   FOperations := TOperatoren.Create;
   FMainStack  := TParserStack.Create;
-  FTmpStack   := TParserStack.Create;
   FVariables  := TVariables.Create;
   FVariables.Add('pi', Pi);
-  FCalculator           := TCalculator.Create(FMainStack, FOperations, @FError);
-  FCalculator.Variables := FVariables;
+  FCalculator := TCalculator.Create(FOperations, FVariables, @FError);
 
   AddOperatoren(FOperations);
   AddMath(FOperations);
@@ -178,23 +172,18 @@ begin
   AddTrigonometryDeg(FOperations);
   AddLogarithm(FOperations);
 
-  FValidate  := TValidate.Create(FMainStack, FOperations, @FError);
-  FParser    := TParser.Create(FMainStack, FOperations, @FError);
-  FPriority  := TPriority.Create(FMainStack, FOperations, @FError);
-  FCountArgs := TCountArguments.Create(FMainStack, FOperations, @FError);
+  FValidate := TValidate.Create(FMainStack, FOperations, @FError);
+  FParser   := TParser.Create(FOperations, @FError);
+  FPriority := TPriority.Create(FMainStack, FOperations, @FError);
 end;
 
 destructor TMathParser.Destroy;
 begin
-  FCountArgs.Free;
   FPriority.Free;
   FParser.Free;
   FValidate.Free;
 
   FCalculator.Free;
-  FTmpStack.ClearAndFree;
-  FTmpStack.Free;
-  FMainStack.ClearAndFree;
   FMainStack.Free;
 
   FVariables.Free;
@@ -212,56 +201,24 @@ procedure TMathParser.SetExpression(const Value: string);
 begin
   if not SameStr(FExpression, Value) then
   begin
-    FTmpStack.ClearAndFree;
     FResult     := 0;
     FExpression := Value;
     FError.Clear;
+    FIsToCalc := True;
     if (FExpression.Length > 0) then
-    begin
       CreateStack;
-      FIsToCalc := True;
-    end;
   end;
 end;
 
 function TMathParser.GetParserResult: Double;
 begin
-  if FIsToCalc or FMainStack.ContainsVariable or FTmpStack.ContainsVariable then
+  if FIsToCalc or FMainStack.Contains(tsVariable) then
   begin
-    if FMainStack.Count > 0 then
-      SaveStack
-    else
-      tmpToStack;
-    FResult := FCalculator.calcResult;
+    FResult := FCalculator.calcResult(FMainStack.ToArray);
     DoError(FError);
     FIsToCalc := False;
   end;
   Result := FResult;
-end;
-
-procedure TMathParser.SaveStack;
-var
-  iItem, tmp: TParserItem;
-begin
-  FTmpStack.ClearAndFree;
-  for iItem in FMainStack do
-  begin
-    tmp := TParserItem.Create;
-    tmp.Assign(iItem);
-    FTmpStack.Add(tmp);
-  end;
-end;
-
-procedure TMathParser.tmpToStack;
-var
-  iItem, tmp: TParserItem;
-begin
-  for iItem in FTmpStack do
-  begin
-    tmp := TParserItem.Create;
-    tmp.Assign(iItem);
-    FMainStack.Add(tmp);
-  end;
 end;
 
 procedure TMathParser.SaveToStream(S: TStream);
@@ -304,7 +261,7 @@ begin
   end;
 
   S.ReadBuffer(FError, SizeOf(Integer));
-  FMainStack.ClearAndFree;
+  FMainStack.Clear;
 
   S.ReadBuffer(c, SizeOf(Integer));
   for i := 0 to c - 1 do
@@ -317,24 +274,19 @@ end;
 
 procedure TMathParser.CreateStack;
 begin
-  FMainStack.ClearAndFree;
-
-  FParser.Expression := FExpression.ToLower;
-  FParser.Prozess;
+  FMainStack.Clear;
+  FMainStack.AddRange(FParser.ExpressionToStack(FExpression));
   FValidate.Prozess;
-  FCountArgs.Prozess;
   FPriority.Prozess;
+  FMainStack.Clear(tsLeftBracket);
+  FMainStack.Clear(tsRightBracket);
+  FMainStack.Clear(tsSeparator);
   DoError(FError);
 end;
 
 function TMathParser.GetLastError: TError;
 begin
   Result := FError;
-end;
-
-function TMathParser.GetLastErrorString: string;
-begin
-  Result := FError.ToString;
 end;
 
 { TPostProzess_Validate }
@@ -344,10 +296,56 @@ begin
   if FError^.IsNoError then
   begin
     CheckBracketError;
+    if FError.IsNoError then
+      FStack.SetArgCount;
     CleanPlusMinus;
     InsertMulti;
     Loop;
+    if FError.IsNoError then
+    begin
+      CountArg;
+      CheckError;
+    end;
   end;
+end;
+
+procedure TValidate.CheckError;
+var
+  i, c: Integer;
+begin
+  for i := 0 to FStack.Count - 1 do
+    if (FError^.IsNoError) and (FStack[i].TypeStack in [tsFunction, tsOperator]) then
+    begin
+      c := FOperations[FStack[i].Name].Arguments;
+      if (FStack[i].ArgumentsCount > c) and (c > -1) or (c > -1) and (FStack[i].ArgumentsCount = 0) then
+      begin
+        FError^.Code     := cErrorToManyArgs;
+        FError^.Position := FStack[i].TextPos;
+      end
+
+      else if FStack[i].ArgumentsCount < c then
+      begin
+        FError^.Code     := cErrorNotEnoughArgs;
+        FError^.Position := FStack[i].TextPos;
+      end
+
+      else if (i < FStack.Count - 2) and (FStack[i + 1].TypeStack = tsLeftBracket) and
+        (FStack[i + 2].TypeStack = tsRightBracket) then
+      begin
+        FStack[i].ArgumentsCount := 0;
+        FError^.Code             := cErrorNotEnoughArgs;
+        FError^.Position         := FStack[i].TextPos;
+      end
+    end;
+end;
+
+procedure TValidate.CountArg;
+var
+  iSS: TParserItem;
+begin
+  for iSS in FStack do
+    if iSS.TypeStack = tsOperator then
+      iSS.ArgumentsCount := FOperations[iSS.Name].Arguments;
 end;
 
 procedure TValidate.CleanPlusMinus;
@@ -369,8 +367,8 @@ var
   LeftBracketCount : Integer;
   RightBracketCount: Integer;
 begin
-  LeftBracketCount  := FStack.CountLeftBracket;
-  RightBracketCount := FStack.CountRightBracket;
+  LeftBracketCount  := FStack.CountType(tsLeftBracket);
+  RightBracketCount := FStack.CountType(tsRightBracket);
 
   if LeftBracketCount > RightBracketCount then
   begin
@@ -479,62 +477,112 @@ end;
 
 { TPraeProzess }
 
+constructor TParser.Create(AOperations: TOperatoren; AError: PError);
+begin
+  inherited Create;
+  FOperations := AOperations;
+  FStack      := TList<TParserItem>.Create;
+  FError      := AError;
+end;
+
+destructor TParser.Destroy;
+begin
+  FStack.Free;
+  inherited;
+end;
+
 procedure TParser.ParseFunctions;
 var
-  S: string;
+  S : string;
+  Op: TOperator;
+
+  function FunctionOfExpression: string;
+  var
+    i: Integer;
+  begin
+    Result := '';
+    for i  := FParsePosition to Length(FExpression) do
+      if CharInSet(FExpression[i], Letters + Numbers + ['_']) then
+        Result := Result + FExpression[i]
+      else
+        Break;
+  end;
+
 begin
   S := FunctionOfExpression;
-  if (Length(S) > 1) and CharInSet(S[1], ['e']) and CharInSet(S[2], ['0' .. '9', ' ']) then
+  if Length(S) > 0 then
   begin
-    Inc(FPos);
-    PushExponent;
-  end
-  else if Length(S) > 0 then
-  begin
-    FPos := FPos + Length(S);
-    PushFunctionVariable(S);
+    Op := FOperations[S];
+    if Assigned(Op) then
+      FStack.Add(TParserItem.Create(Op.Name, FParsePosition))
+    else
+      FStack.Add(TParserItem.Create(tsVariable, FParsePosition, S));
+
+    FParsePosition := FParsePosition + Length(S);
   end;
 end;
 
 procedure TParser.ParseNumbers;
 var
-  S: string;
+  s: string;
   v: Double;
-begin
-  S    := NumberOfExpression;
-  FPos := FPos + Length(S);
-  if CharInSet(S[Length(S)], [',']) then
+
+  function NumberInString: string;
+  var
+    i: Integer;
   begin
-    Dec(FPos);
-    FExpression[FPos] := ';';
-    System.Delete(S, Length(S), 1);
+    Result := '';
+    for i  := FParsePosition to Length(FExpression) do
+      if CharInSet(FExpression[i], Numbers) then
+        Result := Result + FExpression[i]
+      else if CharInSet(FExpression[i], ['.', ',']) then
+        Result := Result + FormatSettings.DecimalSeparator
+      else
+        Break;
   end;
 
-  if TryStrToFloat(S, v) then
-    FStack.Add(TParserItem.Create(v, FPos));
+begin
+  s              := NumberInString;
+  FParsePosition := FParsePosition + Length(s);
+
+  if CharInSet(s[Length(s)], [',']) then
+  begin
+    Dec(FParsePosition);
+    FExpression[FParsePosition] := ';';
+
+    System.Delete(s, Length(s), 1);
+    if s = '' then
+      Exit;
+  end;
+
+  if TryStrToFloat(s, v) then
+    FStack.Add(TParserItem.Create(v, FParsePosition))
+  else
+  begin
+    FError^.Code     := cErrorInvalidFloat;
+    FError^.Position := FParsePosition;
+  end;
 end;
 
-procedure TParser.Prozess;
-var
-  len: Integer;
+procedure TParser.Parse;
 begin
-  len  := Length(FExpression);
-  FPos := 1;
+  FParsePosition := 1;
+  ParseExponent;
 
-  while FError^.IsNoError and (FPos <= len) do
+  while FError^.IsNoError and (FParsePosition <= Length(FExpression)) do
     with FStack do
     begin
-      case FExpression[FPos] of
+      case FExpression[FParsePosition] of
         '(', '{', '[':
           begin
-            Add(TParserItem.Create(FExpression[FPos], FPos));
-            Inc(FPos);
+            Add(TParserItem.Create(FExpression[FParsePosition], FParsePosition));
+            Inc(FParsePosition);
           end;
 
         ')', '}', ']':
           begin
-            Add(TParserItem.Create(FExpression[FPos], FPos));
-            Inc(FPos);
+            Add(TParserItem.Create(FExpression[FParsePosition], FParsePosition));
+            Inc(FParsePosition);
           end;
 
         'a' .. 'z', '_':
@@ -545,72 +593,53 @@ begin
 
         ';':
           begin
-            Add(TParserItem.Create(tsSeparator, FPos));
-            Inc(FPos);
+            Add(TParserItem.Create(tsSeparator, FParsePosition));
+            Inc(FParsePosition);
           end;
 
         '-', '+', '/', '*', '^', '%':
           begin
-            Add(TParserItem.Create(FExpression[FPos], FPos));
-            Inc(FPos);
+            Add(TParserItem.Create(FExpression[FParsePosition], FParsePosition));
+            Inc(FParsePosition);
           end;
 
         ' ':
-          Inc(FPos);
+          Inc(FParsePosition);
 
       else
         begin
           FError^.Code     := cErrorInvalidCar;
-          FError^.Position := FPos;
+          FError^.Position := FParsePosition;
         end;
       end;
     end;
 end;
 
-function TParser.NumberOfExpression: string;
+procedure TParser.ParseExponent;
 var
-  i: Integer;
+  Len: Integer;
+  i  : Integer;
 begin
-  Result := '';
-  for i  := FPos to Length(FExpression) do
-    case FExpression[i] of
-      '0' .. '9':
-        Result := Result + FExpression[i];
-      '.', ',':
-        Result := Result + FormatSettings.DecimalSeparator;
-    else
-      Break;
+  Len   := Length(FExpression);
+  for i := 2 to Len - 1 do
+    if FExpression[i] = 'e' then
+    begin
+      if CharInSet(FExpression[i - 1], Numbers + [')', ']']) and
+        (CharInSet(FExpression[i + 1], Numbers) or CharInSet(FExpression[i + 1], ['+', '-']) and
+        CharInSet(FExpression[i + 2], Numbers)) then
+      begin
+        Delete(FExpression, i, 1);
+        Insert('*10^', FExpression, i);
+      end;
     end;
 end;
 
-function TParser.FunctionOfExpression: string;
-var
-  i: Integer;
+function TParser.ExpressionToStack(const Expression: string): TArray<TParserItem>;
 begin
-  Result := '';
-  for i  := FPos to Length(FExpression) do
-    if CharInSet(FExpression[i], ['a' .. 'z', '0' .. '9', '_']) then
-      Result := Result + FExpression[i]
-    else
-      Break;
-end;
-
-procedure TParser.PushExponent(AExponent: Integer);
-begin
-  FStack.Add(TParserItem.Create('*', FPos));
-  FStack.Add(TParserItem.Create(AExponent, FPos));
-  FStack.Add(TParserItem.Create('^', FPos));
-end;
-
-procedure TParser.PushFunctionVariable(AText: string);
-var
-  Op: TOperator;
-begin
-  Op := FOperations[AText];
-  if Assigned(Op) then
-    FStack.Add(TParserItem.Create(Op.Name, FPos - Length(AText)))
-  else
-    FStack.Add(TParserItem.Create(tsVariable, FPos - Length(AText), AText));
+  FExpression := Expression.ToLower;
+  FStack.Clear;
+  Parse;
+  Result := FStack.ToArray;
 end;
 
 { TPostProzess_Priority }
@@ -661,12 +690,16 @@ begin
 end;
 
 procedure TPriority.CreateNewStack;
-var
-  SI: TParserItem;
 begin
   while FTmpStack.Count > 0 do
     FPStack.Push(FTmpStack.Pop);
-  FStack.Clear;
+
+  FStack.OwnsObjects := False;
+  try
+    FStack.Clear;
+  finally
+    FStack.OwnsObjects := True;
+  end;
   FStack.AddRange(FPStack);
 end;
 
@@ -698,62 +731,14 @@ begin
   Current.Free;
 end;
 
-{ TPostProzess_CountArguments }
-
-procedure TCountArguments.CheckError;
-var
-  i, c: Integer;
-begin
-  for i := 0 to FStack.Count - 1 do
-    if (FError^.IsNoError) and (FStack[i].TypeStack in [tsFunction, tsOperator]) then
-    begin
-      c := FOperations[FStack[i].Name].Arguments;
-      if (FStack[i].ArgumentsCount > c) and (c > -1) or (c > -1) and (FStack[i].ArgumentsCount = 0) then
-      begin
-        FError^.Code     := cErrorToManyArgs;
-        FError^.Position := FStack[i].TextPos;
-      end
-
-      else if FStack[i].ArgumentsCount < c then
-      begin
-        FError^.Code     := cErrorNotEnoughArgs;
-        FError^.Position := FStack[i].TextPos;
-      end
-
-      else if (i < FStack.Count - 2) and (FStack[i + 1].TypeStack = tsLeftBracket) and
-        (FStack[i + 2].TypeStack = tsRightBracket) then
-      begin
-        FStack[i].ArgumentsCount := 0;
-        FError^.Code             := cErrorNotEnoughArgs;
-        FError^.Position         := FStack[i].TextPos;
-      end;
-    end;
-end;
-
-procedure TCountArguments.Prozess;
-begin
-  if FError^.IsNoError then
-  begin
-    FStack.SetArgCount;
-    CountArg;
-    CheckError;
-  end;
-end;
-
-procedure TCountArguments.CountArg;
-var
-  iSS: TParserItem;
-begin
-  for iSS in FStack do
-    if iSS.TypeStack = tsOperator then
-      iSS.ArgumentsCount := FOperations[iSS.Name].Arguments;
-end;
-
 { TCalculator }
 
-constructor TCalculator.Create(AStack: TParserStack; AOperations: TOperatoren; AError: PError);
+constructor TCalculator.Create(AOperations: TOperatoren; AVariables: TVariables; AError: PError);
 begin
-  inherited;
+  inherited Create;
+  FOperations  := AOperations;
+  FVariables   := AVariables;
+  FError       := AError;
   FResultStack := TStack<TParserItem>.Create;
   FValues      := TList<Double>.Create;
 end;
@@ -765,26 +750,22 @@ begin
   inherited;
 end;
 
-procedure TCalculator.StackToResult;
+procedure TCalculator.StackToResult(const AStack: TArray<TParserItem>);
 var
   Current: TParserItem;
 begin
-  for Current in FStack do
+  for Current in AStack do
     if FError^.IsNoError then
       case Current.TypeStack of
         tsValue:
-          FResultStack.Push(Current);
+          FResultStack.Push(TParserItem.Create(Current));
 
         tsVariable:
           StackToResult_Variable(Current);
 
         tsOperator, tsFunction:
           StackToResult_Operation(Current);
-      end
-    else
-      Current.Free;
-
-  FStack.Clear;
+      end;
 end;
 
 procedure TCalculator.StackToResult_Operation(ACurrent: TParserItem);
@@ -803,25 +784,22 @@ begin
   end;
 
   FValues.Reverse;
-  O := FOperations[ACurrent.Name];
-  if not O.IsError(FValues.ToArray, Error) then
+  O     := FOperations[ACurrent.Name];
+  Error := O.Error(FValues.ToArray);
+  if Error = cNoError then
     FResultStack.Push(TParserItem.Create(O.Func(FValues.ToArray), ACurrent.TextPos))
   else
   begin
     FError^.Code     := Error;
     FError^.Position := ACurrent.TextPos;
   end;
-  ACurrent.Free;
 end;
 
-function TCalculator.calcResult: Double;
+function TCalculator.calcResult(const AStack: TArray<TParserItem>): Double;
 begin
-  if FError^.IsNoError then
-  begin
-    FResultStack.Clear;
-    StackToResult;
-    Result := SetResult;
-  end;
+  FResultStack.Clear;
+  StackToResult(AStack);
+  Result := SetResult;
 end;
 
 procedure TCalculator.StackToResult_Variable(Current: TParserItem);
@@ -835,7 +813,6 @@ begin
     FError^.Code     := cErrorUnknownName;
     FError^.Position := Current.TextPos;
   end;
-  Current.Free;
 end;
 
 function TCalculator.SetResult: Double;
@@ -890,42 +867,32 @@ begin
   end;
 end;
 
-procedure TParserStack.ClearAndFree;
+procedure TParserStack.Clear(const ST: TTypeStack);
 var
-  iItems: TParserItem;
+  i: Integer;
 begin
-  for iItems in Self do
-    iItems.Free;
-  Clear;
+  for i := Count - 1 downto 0 do
+    if Self[i].TypeStack = ST then
+      Delete(i);
 end;
 
-function TParserStack.ContainsVariable: Boolean;
+function TParserStack.Contains(const ST: TTypeStack): Boolean;
 var
   iItem: TParserItem;
 begin
   for iItem in Self do
-    if iItem.TypeStack = tsVariable then
+    if iItem.TypeStack = ST then
       Exit(True);
   Result := False;
 end;
 
-function TParserStack.CountLeftBracket: Integer;
+function TParserStack.CountType(const ST: TTypeStack): Integer;
 var
   iItems: TParserItem;
 begin
   Result := 0;
   for iItems in Self do
-    if iItems.TypeStack = tsLeftBracket then
-      Inc(Result);
-end;
-
-function TParserStack.CountRightBracket: Integer;
-var
-  iItems: TParserItem;
-begin
-  Result := 0;
-  for iItems in Self do
-    if iItems.TypeStack = tsRightBracket then
+    if iItems.TypeStack = ST then
       Inc(Result);
 end;
 

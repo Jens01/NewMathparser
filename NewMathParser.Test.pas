@@ -128,7 +128,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorNotEnoughArgs;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
 end;
@@ -152,7 +152,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorNotEnoughArgs;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
 end;
@@ -181,7 +181,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorDivByZero;
     EExpected.Position := 4;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
   end;
@@ -259,7 +259,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorNotEnoughArgs;
     EExpected.Position := 6;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
   with FMathParser do
@@ -332,7 +332,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorUnknownName;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
   with FMathParser do
@@ -363,7 +363,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorToManyArgs;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
 
@@ -403,7 +403,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
 
@@ -411,7 +411,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
   end;
@@ -441,7 +441,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
 
@@ -449,7 +449,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
   end;
@@ -492,7 +492,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
 
@@ -500,7 +500,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
   end;
@@ -530,7 +530,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
 
@@ -538,7 +538,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
   end;
@@ -689,7 +689,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorDivByZero;
     EExpected.Position := 3;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckEquals(EExpected.Code, EReturnValue.Code, Expression);
     CheckEquals(EExpected.Position, EReturnValue.Position, Expression);
   end;
@@ -708,12 +708,25 @@ begin
   end;
   with FMathParser do
   begin
+    Expression := '1e+3';
+    Expected    := 1000;
+    ReturnValue := ParserResult;
+    CheckEquals(Expected, ReturnValue, 0.00001, Expression);
+  end;
+  with FMathParser do
+  begin
+    Expression := '1e-3';
+    Expected    := 0.001;
+    ReturnValue := ParserResult;
+    CheckEquals(Expected, ReturnValue, 0.00001, Expression);
+  end;
+  with FMathParser do
+  begin
     Expression  := '1e10';
     Expected    := 10000000000;
     ReturnValue := ParserResult;
     CheckEquals(Expected, ReturnValue, 0.00001, Expression);
   end;
-
   with FMathParser do
   begin
     Expression  := 'Max(1, 2)e3';
@@ -735,7 +748,7 @@ begin
 
     EExpected.Code     := cErrorToManyArgs;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -746,7 +759,7 @@ begin
 
     EExpected.Code     := cErrorNotEnoughArgs;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -757,7 +770,7 @@ begin
 
     EExpected.Code     := cErrorOperator;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -768,7 +781,7 @@ begin
 
     EExpected.Code     := cErrorOperator;
     EExpected.Position := 2;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -780,7 +793,7 @@ begin
 
     EExpected.Code     := cErrorMissingLeftBrackets;
     EExpected.Position := -1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -793,7 +806,7 @@ begin
 
     EExpected.Code     := cErrorMissingLeftBrackets;
     EExpected.Position := -1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -805,7 +818,7 @@ begin
 
     EExpected.Code     := cErrorMissingLeftBrackets;
     EExpected.Position := -1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -818,7 +831,7 @@ begin
 
     EExpected.Code     := cErrorMissingLeftBrackets;
     EExpected.Position := -1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -830,7 +843,7 @@ begin
 
     EExpected.Code     := cErrorMissingLeftBrackets;
     EExpected.Position := -1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -842,7 +855,7 @@ begin
 
     EExpected.Code     := cErrorMissingLeftBrackets;
     EExpected.Position := -1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -854,7 +867,7 @@ begin
 
     EExpected.Code     := cErrorRightBracket;
     EExpected.Position := 7;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -866,7 +879,7 @@ begin
 
     EExpected.Code     := cErrorRightBracket;
     EExpected.Position := 7;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -880,7 +893,7 @@ begin
     EExpected.Code     := cErrorMissingRightBrackets;
     EExpected.Position := -1;
     CheckError(EExpected, FResultError, Expression);
-    EReturnValue := GetLastError;
+    EReturnValue := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
   with FMathParser do
@@ -892,7 +905,7 @@ begin
     EExpected.Code     := cErrorMissingLeftBrackets;
     EExpected.Position := -1;
     CheckError(EExpected, FResultError, Expression);
-    EReturnValue := GetLastError;
+    EReturnValue := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
 
@@ -905,7 +918,7 @@ begin
     EExpected.Code     := cErrorOperatorNeedArgument;
     EExpected.Position := 3;
     CheckError(EExpected, FResultError, Expression);
-    EReturnValue := GetLastError;
+    EReturnValue := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
 
@@ -917,7 +930,7 @@ begin
 
     EExpected.Code     := cErrorSeparator;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -930,7 +943,7 @@ begin
 
     EExpected.Code     := cErrorSeparator;
     EExpected.Position := 2;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -943,7 +956,7 @@ begin
 
     EExpected.Code     := cErrorSeparator;
     EExpected.Position := 2;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -956,7 +969,7 @@ begin
 
     EExpected.Code     := cErrorRightBracket;
     EExpected.Position := 5;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -969,7 +982,7 @@ begin
 
     EExpected.Code     := cErrorToManyArgs;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
   end;
@@ -1072,7 +1085,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
 end;
@@ -1101,7 +1114,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
 end;
@@ -1130,7 +1143,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
 end;
@@ -1159,7 +1172,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
   with FMathParser do
@@ -1168,7 +1181,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
 end;
@@ -1184,15 +1197,16 @@ begin
     begin
       MP := TMathParser.Create;
       try
-        for i := 1 to 100000 do
+        for i := 1 to 1000 do
         begin
           MP.Expression := 'Max(3+5, 4, 5) + Min(3, 4, 5) + ((4+5)6)7 + ((4+5)6)7';
-          R := MP.ParserResult;
+          R := MP.ParserResult;  // 767
+          MP.Expression := '';
         end;
       finally
         MP.Free;
       end;
-    end, 10, 50);
+    end, 10, 35);
 end;
 
 procedure TestTMathParser.TestPower;
@@ -1239,7 +1253,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorPower;
     EExpected.Position := 3;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
 end;
@@ -1367,7 +1381,7 @@ begin
     R                  := ParserResult;
     EExpected.Code     := cErrorFxInvalidValue;
     EExpected.Position := 1;
-    EReturnValue       := GetLastError;
+    EReturnValue       := Error;
     CheckError(EExpected, EReturnValue, Expression);
   end;
 end;

@@ -28,7 +28,7 @@ begin
           Result := 4
         end;
 
-      Error := MP.GetLastError;
+      Error := MP.Error;
       if Error.IsNoError then
         Writeln(MP.ParserResult.ToString)
       else

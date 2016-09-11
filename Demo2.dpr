@@ -19,7 +19,7 @@ begin
       MP.Expression     := 'a + b';
       MP.Variables['A'] := 5;
       MP.Variables['b'] := 3;
-      Error             := MP.GetLastError;
+      Error             := MP.Error;
       if Error.IsNoError then
         Writeln(MP.ParserResult.ToString)
       else
