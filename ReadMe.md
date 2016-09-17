@@ -21,16 +21,16 @@ Operators:
 ```delphi
 var
  MP : TMathParser;
- Error: TError;
+ R: Double;
 begin
  MP := TMathParser.Create;
  try
    MP.Expression := '((4+5)6)7 + Min(3, 4, 5)';
-   Error := MP.GetLastError;
-   if Error.IsNoError then
-     ShowMessage(MP.ParserResult.ToString)
+   R := MP.ParserResult;
+   if MP.Error.IsNoError then
+     ShowMessage(R.ToString)
    else
-     ShowMessage(Error.ToString); 
+     ShowMessage(MP.Error.ToString); 
  finally
   MP.Free;
  end;
