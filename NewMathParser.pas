@@ -24,6 +24,8 @@ type
     function ArgCount(const SI: TParserItem): Integer;
     function CountType(const ST: TTypeStack): Integer; overload;
     function Contains(const ST: TTypeStack): Boolean;
+    function First(const ST: TTypeStack): TParserItem; overload;
+    function Last(const ST: TTypeStack): TParserItem; overload;
   end;
 
   TProzessbasis = class(TObject)
@@ -138,21 +140,6 @@ type
   end;
 
 implementation
-
-// var
-// MP   : TMathParser;
-// Error: TError;
-// begin
-// MP := TMathParser.Create;
-// try
-// MP.Expression := '((4+5)6)7 + Min(3, 4, 5)';
-// Error         := TError;
-// if Error.IsNoError then
-// ShowMessage(MP.ParserResult.ToString);
-// finally
-// MP.Free;
-// end;
-// end;
 
 constructor TMathParser.Create;
 begin
@@ -278,9 +265,9 @@ begin
   FMainStack.AddRange(FParser.ExpressionToStack(FExpression));
   FValidate.Prozess;
   FPriority.Prozess;
-  FMainStack.Clear(tsLeftBracket);
-  FMainStack.Clear(tsRightBracket);
-  FMainStack.Clear(tsSeparator);
+  // FMainStack.Clear(tsLeftBracket);
+  // FMainStack.Clear(tsRightBracket);
+  // FMainStack.Clear(tsSeparator);
   DoError(FError);
 end;
 
@@ -317,13 +304,13 @@ begin
     if (FError^.IsNoError) and (FStack[i].TypeStack in [tsFunction, tsOperator]) then
     begin
       c := FOperations[FStack[i].Name].Arguments;
-      if (FStack[i].ArgumentsCount > c) and (c > -1) or (c > -1) and (FStack[i].ArgumentsCount = 0) then
+      if (FStack[i].ArgumentsCount > c) and (c > -1) then
       begin
         FError^.Code     := cErrorToManyArgs;
         FError^.Position := FStack[i].TextPos;
       end
 
-      else if FStack[i].ArgumentsCount < c then
+      else if (FStack[i].ArgumentsCount < c) or (c > -1) and (FStack[i].ArgumentsCount = 0) then
       begin
         FError^.Code     := cErrorNotEnoughArgs;
         FError^.Position := FStack[i].TextPos;
@@ -366,6 +353,7 @@ procedure TValidate.CheckBracketError;
 var
   LeftBracketCount : Integer;
   RightBracketCount: Integer;
+  iSS              : TParserItem;
 begin
   LeftBracketCount  := FStack.CountType(tsLeftBracket);
   RightBracketCount := FStack.CountType(tsRightBracket);
@@ -373,13 +361,15 @@ begin
   if LeftBracketCount > RightBracketCount then
   begin
     FError^.Code     := cErrorMissingRightBrackets;
-    FError^.Position := -1;
+    iSS              := FStack.First(tsLeftBracket);
+    FError^.Position := iSS.TextPos;
   end
 
   else if LeftBracketCount < RightBracketCount then
   begin
     FError^.Code     := cErrorMissingLeftBrackets;
-    FError^.Position := -1;
+    iSS              := FStack.Last(tsRightBracket);
+    FError^.Position := iSS.TextPos;
   end;
 end;
 
@@ -565,11 +555,14 @@ begin
 end;
 
 procedure TParser.Parse;
+var
+  L: Integer;
 begin
   FParsePosition := 1;
   ParseExponent;
+  L := Length(FExpression);
 
-  while FError^.IsNoError and (FParsePosition <= Length(FExpression)) do
+  while FError^.IsNoError and (FParsePosition <= L) do
     with FStack do
     begin
       case FExpression[FParsePosition] of
@@ -617,11 +610,11 @@ end;
 
 procedure TParser.ParseExponent;
 var
-  Len: Integer;
-  i  : Integer;
+  L: Integer;
+  i: Integer;
 begin
-  Len   := Length(FExpression);
-  for i := 2 to Len - 1 do
+  L     := Length(FExpression);
+  for i := 2 to L - 1 do
     if FExpression[i] = 'e' then
     begin
       if CharInSet(FExpression[i - 1], Numbers + [')', ']']) and
@@ -894,6 +887,26 @@ begin
   for iItems in Self do
     if iItems.TypeStack = ST then
       Inc(Result);
+end;
+
+function TParserStack.First(const ST: TTypeStack): TParserItem;
+var
+  iItems: TParserItem;
+begin
+  for iItems in Self do
+    if iItems.TypeStack = ST then
+      Exit(iItems);
+  Result := nil;
+end;
+
+function TParserStack.Last(const ST: TTypeStack): TParserItem;
+var
+  i: Integer;
+begin
+  for i := Self.Count - 1 downto 0 do
+    if Self[i].TypeStack = ST then
+      Exit(Self[i]);
+  Result := nil;
 end;
 
 procedure TParserStack.SetArgCount;

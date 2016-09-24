@@ -792,7 +792,7 @@ begin
     R          := ParserResult;
 
     EExpected.Code     := cErrorMissingLeftBrackets;
-    EExpected.Position := -1;
+    EExpected.Position := 7;
     EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
@@ -805,7 +805,7 @@ begin
     R          := ParserResult;
 
     EExpected.Code     := cErrorMissingLeftBrackets;
-    EExpected.Position := -1;
+    EExpected.Position := 5;
     EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
@@ -817,7 +817,7 @@ begin
     R          := ParserResult;
 
     EExpected.Code     := cErrorMissingLeftBrackets;
-    EExpected.Position := -1;
+    EExpected.Position := 6;
     EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
@@ -830,7 +830,7 @@ begin
     R          := ParserResult;
 
     EExpected.Code     := cErrorMissingLeftBrackets;
-    EExpected.Position := -1;
+    EExpected.Position := 6;
     EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
@@ -842,7 +842,7 @@ begin
     R          := ParserResult;
 
     EExpected.Code     := cErrorMissingLeftBrackets;
-    EExpected.Position := -1;
+    EExpected.Position := 7;
     EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
@@ -854,7 +854,7 @@ begin
     R          := ParserResult;
 
     EExpected.Code     := cErrorMissingLeftBrackets;
-    EExpected.Position := -1;
+    EExpected.Position := 7;
     EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
     CheckError(EExpected, EReturnValue, Expression);
@@ -891,7 +891,7 @@ begin
 
     R                  := ParserResult;
     EExpected.Code     := cErrorMissingRightBrackets;
-    EExpected.Position := -1;
+    EExpected.Position := 1;
     CheckError(EExpected, FResultError, Expression);
     EReturnValue := Error;
     CheckError(EExpected, EReturnValue, Expression);
@@ -903,7 +903,7 @@ begin
 
     R                  := ParserResult;
     EExpected.Code     := cErrorMissingLeftBrackets;
-    EExpected.Position := -1;
+    EExpected.Position := 8;
     CheckError(EExpected, FResultError, Expression);
     EReturnValue := Error;
     CheckError(EExpected, EReturnValue, Expression);
@@ -981,6 +981,19 @@ begin
     R          := ParserResult;
 
     EExpected.Code     := cErrorToManyArgs;
+    EExpected.Position := 1;
+    EReturnValue       := Error;
+    CheckError(EExpected, FResultError, Expression);
+    CheckError(EExpected, EReturnValue, Expression);
+  end;
+
+  with FMathParser do
+  begin
+    FResultError.Clear;
+    Expression := 'Max()';
+    R          := ParserResult;
+
+    EExpected.Code     := cErrorNotEnoughArgs;
     EExpected.Position := 1;
     EReturnValue       := Error;
     CheckError(EExpected, FResultError, Expression);
